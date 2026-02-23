@@ -1,0 +1,41 @@
+# --- Python ---
+.venv/
+venv/
+env/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.coverage
+htmlcov/
+Dockerfile
+# --- Environnement et Secrets (CRITIQUE) ---
+.env
+.env.local
+.env.test
+*.ini
+# Note: On garde alembic.ini car il est nécessaire, 
+# mais assurez-vous qu'il ne contient plus de mot de passe en dur !
+
+# --- IDEs ---
+.vscode/
+.idea/
+*.swp
+
+# --- Distribution & Build ---
+dist/
+build/
+*.spec
+bin/
+
+# --- Base de données locale ---
+*.db
+*.sqlite3
+
+# --- Frontend PyQt6 ---
+*.spec
+dist/
+build/
+
+.hypothesis/
