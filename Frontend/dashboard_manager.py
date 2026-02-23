@@ -1,121 +1,161 @@
 import requests
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, 
-    QGridLayout, QGraphicsDropShadowEffect, QMessageBox, QPushButton
+    QWidget, QVBoxLayout, QGridLayout, QLabel, QFrame,
+    QPushButton, QMessageBox
 )
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QColor
-from config import API_BASE_URL
+from PyQt6.QtGui import QColor, QCursor
+from PyQt6.QtWidgets import QGraphicsDropShadowEffect
 
-class DashboardCard(QFrame):
-    """Bouton stylisé sous forme de carte blanche avec ombre portée"""
-    def __init__(self, title, icon_text, color="#6366F1", callback=None):
+# Placeholder – real base URL is confidential
+API_BASE_URL = "https://example.com/api/v1"
+
+
+class ShowcaseCard(QFrame):
+    """Modern clickable card with shadow and hover – demo only"""
+
+    def __init__(self, title: str, icon: str, accent_color="#6366F1", on_click=None):
         super().__init__()
-        self.setFixedSize(220, 240)
-        self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.callback = callback
-        
+        self.setFixedSize(240, 260)
+        self.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        self.on_click = on_click
+
         self.setStyleSheet("""
             QFrame {
                 background-color: white;
                 border-radius: 20px;
             }
             QFrame:hover {
-                background-color: #FBFBFF;
+                background-color: #F8F9FF;
             }
         """)
 
-        # Effet d'ombre
+        # Soft shadow effect
         shadow = QGraphicsDropShadowEffect(self)
-        shadow.setBlurRadius(25)
+        shadow.setBlurRadius(28)
         shadow.setXOffset(0)
-        shadow.setYOffset(8)
-        shadow.setColor(QColor(0, 0, 0, 30))
+        shadow.setYOffset(10)
+        shadow.setColor(QColor(0, 0, 0, 40))
         self.setGraphicsEffect(shadow)
 
         layout = QVBoxLayout(self)
         layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.setSpacing(12)
 
-        icon_label = QLabel(icon_text)
-        icon_label.setStyleSheet(f"font-size: 60px; color: {color}; margin-bottom: 10px;")
-        icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        
-        title_label = QLabel(title)
-        title_label.setStyleSheet("font-size: 15px; font-weight: bold; color: #1F2937;")
-        title_label.setWordWrap(True)
-        title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        # Icon (emoji or symbol)
+        icon_lbl = QLabel(icon)
+        icon_lbl.setStyleSheet(f"font-size: 64px; color: {accent_color};")
+        icon_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        layout.addWidget(icon_label)
-        layout.addWidget(title_label)
+        # Title
+        title_lbl = QLabel(title)
+        title_lbl.setStyleSheet("""
+            font-size: 16px;
+            font-weight: 600;
+            color: #1F2937;
+            text-align: center;
+        """)
+        title_lbl.setWordWrap(True)
+
+        layout.addStretch(1)
+        layout.addWidget(icon_lbl)
+        layout.addWidget(title_lbl)
+        layout.addStretch(1)
 
     def mousePressEvent(self, event):
-        if self.callback:
-            self.callback()
+        if self.on_click:
+            self.on_click()
 
-class DashboardManager(QWidget):
-    def __init__(self, token):
+
+class DashboardShowcase(QWidget):
+    """Public demo version – real analytics dashboard redacted"""
+
+    def __init__(self, auth_token: str):
         super().__init__()
-        self.token = token
-        self.api_url = API_BASE_URL
+        self.token = auth_token
+        self.api_base = API_BASE_URL
         self.init_ui()
 
     def init_ui(self):
-        self.main_layout = QVBoxLayout(self)
-        self.main_layout.setContentsMargins(60, 60, 60, 60)
-        
-        header = QLabel("Tableau de Bord Analytique")
-        header.setStyleSheet("font-size: 30px; font-weight: bold; color: #111827; margin-bottom: 40px;")
-        self.main_layout.addWidget(header, alignment=Qt.AlignmentFlag.AlignCenter)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(60, 60, 60, 60)
+        layout.setSpacing(40)
 
-        grid = QGridLayout()
-        grid.setSpacing(50)
-
-        # Carte Finance (Icône % comme dans l'image)
-        self.card_finance = DashboardCard(
-            "Situation Financière", "٪", "#6366F1", 
-            callback=self.open_finance
-        )
-        """
-        # Carte Clients (Icône Groupe)
-        self.card_profit = DashboardCard(
-            "Rentabilité Clients", "👥", "#10B981", 
-            callback=self.open_profitability
-        )
-"""
-        grid.addWidget(self.card_finance, 0, 0)
-       # grid.addWidget(self.card_profit, 0, 1)
-
-        self.main_layout.addLayout(grid)
-        
-        # Bouton de synchronisation
-        self.btn_sync = QPushButton("🔄 Recalculer les statistiques")
-        self.btn_sync.setStyleSheet("""
-            QPushButton { 
-                margin-top: 40px; padding: 12px 25px; border-radius: 8px;
-                background-color: #F3F4F6; border: 1px solid #D1D5DB; font-weight: 500;
-            }
-            QPushButton:hover { background-color: #E5E7EB; }
+        # Header
+        header = QLabel("Analytics Overview – Demo")
+        header.setStyleSheet("""
+            font-size: 32px;
+            font-weight: 700;
+            color: #111827;
+            letter-spacing: -0.5px;
         """)
-        self.btn_sync.clicked.connect(self.sync_stats)
-        self.main_layout.addWidget(self.btn_sync, alignment=Qt.AlignmentFlag.AlignCenter)
-        self.main_layout.addStretch()
+        layout.addWidget(header, alignment=Qt.AlignmentFlag.AlignCenter)
 
-    def sync_stats(self):
+        # Card grid
+        grid = QGridLayout()
+        grid.setSpacing(60)
+
+        # Example card 1 (Finance-like)
+        card_1 = ShowcaseCard(
+            "Key Metrics",
+            "📊",
+            "#6366F1",
+            on_click=self._open_example_view_1
+        )
+        grid.addWidget(card_1, 0, 0)
+
+        # Example card 2 (commented pattern – add more as needed)
+        # card_2 = ShowcaseCard("Performance", "⚡", "#10B981", self._open_example_view_2)
+        # grid.addWidget(card_2, 0, 1)
+
+        layout.addLayout(grid)
+
+        # Refresh / sync button
+        btn_refresh = QPushButton("↻ Refresh Data")
+        btn_refresh.setStyleSheet("""
+            QPushButton {
+                padding: 14px 32px;
+                font-size: 15px;
+                font-weight: 500;
+                border-radius: 10px;
+                background-color: #F3F4F6;
+                border: 1px solid #D1D5DB;
+            }
+            QPushButton:hover {
+                background-color: #E5E7EB;
+            }
+        """)
+        btn_refresh.clicked.connect(self._refresh_placeholder)
+        layout.addWidget(btn_refresh, alignment=Qt.AlignmentFlag.AlignCenter)
+
+        layout.addStretch()
+
+    def _refresh_placeholder(self):
+        """Placeholder – real stats recalculation hidden"""
         try:
-            headers = {"Authorization": f"Bearer {self.token}"}
-            requests.get(f"{self.api_url}/dashboard/populate", headers=headers)
-            QMessageBox.information(self, "Succès", "Données mises à jour.")
-        except:
-            QMessageBox.critical(self, "Erreur", "Connexion au serveur échouée.")
+            # In real version: requests.get(f"{self.api_base}/admin/refresh-stats", ...)
+            QMessageBox.information(self, "Demo", "Data refresh simulated.\nReal endpoint & logic redacted.")
+        except Exception:
+            QMessageBox.critical(self, "Demo", "Connection simulation failed.")
 
-    def open_finance(self):
-        from dashboard_stats import FinanceStatsWindow
-        self.win_f = FinanceStatsWindow(self.token)
-        self.win_f.show()
+    def _open_example_view_1(self):
+        """Placeholder for opening a detailed view"""
+        QMessageBox.information(self, "Demo", 
+                                "This would open a detailed statistics window.\n"
+                                "Real sub-window & data visualization hidden.")
 
-"""
-    def open_profitability(self):
-        from dashboard_stats import ClientStatsWindow
-        self.win_p = ClientStatsWindow(self.token)
-        self.win_p.show()
-        """
+    # def _open_example_view_2(self):
+    #     QMessageBox.information(self, "Demo", "Another view placeholder.")
+
+
+# ── Standalone demo ─────────────────────────────────────────────────────
+if __name__ == "__main__":
+    from PyQt6.QtWidgets import QApplication
+    import sys
+
+    app = QApplication(sys.argv)
+    window = DashboardShowcase("fake-token-for-demo")
+    window.setWindowTitle("Dashboard – Showcase Only")
+    window.resize(1000, 800)
+    window.show()
+    sys.exit(app.exec())

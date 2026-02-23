@@ -1,301 +1,207 @@
 import requests
 from datetime import datetime
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton, 
-    QLabel, QTableWidget, QTableWidgetItem, QHeaderView, 
+    QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton,
+    QLabel, QTableWidget, QTableWidgetItem, QHeaderView,
     QFrame, QAbstractItemView, QFileDialog, QMessageBox
 )
 from PyQt6.QtCore import Qt, QTimer, QThread, pyqtSignal
 from PyQt6.QtGui import QColor, QFont
-from config import API_BASE_URL
 
-# --- WORKER THREAD (Performance) ---
-class ApiWorker(QThread):
+# Placeholder – real base URL is confidential
+API_BASE_URL = "https://example.com/api/v1"
+
+
+class BackgroundApiWorker(QThread):
+    """Generic worker for async HTTP GET – demo only"""
     finished = pyqtSignal(list)
     error = pyqtSignal(str)
 
-    def __init__(self, url, params, headers):
+    def __init__(self, url, params=None, headers=None):
         super().__init__()
         self.url = url
-        self.params = params
-        self.headers = headers
+        self.params = params or {}
+        self.headers = headers or {}
 
     def run(self):
         try:
-            response = requests.get(self.url, params=self.params, headers=self.headers, timeout=5)
-            if response.status_code == 200:
-                self.finished.emit(response.json())
+            resp = requests.get(self.url, params=self.params, headers=self.headers, timeout=6)
+            if resp.status_code == 200:
+                self.finished.emit(resp.json())
             else:
-                self.error.emit(f"Erreur {response.status_code}")
+                self.error.emit(f"Server error {resp.status_code}")
         except Exception as e:
             self.error.emit(str(e))
 
-# --- CLASSE PRINCIPALE (Visuel Rétabli) ---
-class InventoryManager(QWidget):
-    def __init__(self, token, role):
+
+class GenericItemListView(QWidget):
+    """Showcase version – real inventory logic hidden"""
+
+    def __init__(self, auth_token: str, user_role: str = "standard"):
         super().__init__()
-        self.token = token
-        self.role = role
-        self.api_url = API_BASE_URL
+        self.token = auth_token
+        self.role = user_role.lower()
+        self.api_base = API_BASE_URL
         self.headers = {"Authorization": f"Bearer {self.token}"}
-        
-        # Cache Graphique
-        self.red_color = QColor("#EF4444")
-        self.green_bg = QColor("#F0FDF4")
+
+        # Visual helpers
+        self.red = QColor("#EF4444")
+        self.green_light = QColor("#F0FDF4")
         self.success_bg = QColor("#DCFCE7")
-        self.grey_text = QColor("#6B7280")
+        self.grey = QColor("#6B7280")
         self.bold_font = QFont(); self.bold_font.setBold(True)
         self.italic_font = QFont(); self.italic_font.setItalic(True)
 
-        self.search_timer = QTimer()
-        self.search_timer.setSingleShot(True)
-        self.search_timer.timeout.connect(self.perform_search)
-        
+        self.debounce_timer = QTimer()
+        self.debounce_timer.setSingleShot(True)
+        self.debounce_timer.timeout.connect(self._execute_search)
+
         self.init_ui()
-        self.load_initial_data()
+        self._show_initial_placeholder()
 
     def init_ui(self):
-        self.layout = QVBoxLayout(self)
-        self.layout.setContentsMargins(40, 30, 40, 30)
-        self.layout.setSpacing(20)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(40, 32, 40, 32)
+        layout.setSpacing(24)
 
-        # Header
-        title = QLabel("Consultation du Stock")
-        title.setStyleSheet("font-size: 28px; font-weight: 600; color: #111827; letter-spacing: -0.02em;")
-        self.layout.addWidget(title)
+        # Title
+        title = QLabel("Item Overview – Demo")
+        title.setStyleSheet("font-size: 28px; font-weight: 600; color: #111827;")
+        layout.addWidget(title)
 
-        # Barre de recherche (Ancien visuel rétabli)
-        search_container = QFrame()
-        search_layout = QHBoxLayout(search_container)
-        search_layout.setContentsMargins(0, 0, 0, 0)
-        search_layout.setSpacing(15)
+        # Filters + export
+        filter_bar = QHBoxLayout()
+        filter_bar.setSpacing(16)
 
         input_style = """
             QLineEdit {
-                padding: 10px 15px; border-radius: 8px;
-                border: 1px solid #D1D5DB; background-color: white;
-                font-size: 13px; min-width: 250px;
+                padding: 10px 14px; border: 1px solid #D1D5DB; border-radius: 8px;
+                background: white; font-size: 13px; min-width: 220px;
             }
-            QLineEdit:focus { border: 2px solid #6366F1; }
+            QLineEdit:focus { border-color: #6366F1; }
         """
-        
-        self.search_ref = QLineEdit()
-        self.search_ref.setPlaceholderText("Filtrer par Référence...")
-        self.search_ref.setStyleSheet(input_style)
-        self.search_ref.textChanged.connect(self.on_input_changed)
-        
-        self.search_name = QLineEdit()
-        self.search_name.setPlaceholderText("Filtrer par Désignation")
-        self.search_name.setStyleSheet(input_style)
-        self.search_name.textChanged.connect(self.on_input_changed)
 
-        self.btn_export = QPushButton("📥 Exporter CSV")
+        self.filter_field_1 = QLineEdit()
+        self.filter_field_1.setPlaceholderText("Filter by code...")
+        self.filter_field_1.setStyleSheet(input_style)
+        self.filter_field_1.textChanged.connect(self._on_filter_changed)
+
+        self.filter_field_2 = QLineEdit()
+        self.filter_field_2.setPlaceholderText("Filter by name...")
+        self.filter_field_2.setStyleSheet(input_style)
+        self.filter_field_2.textChanged.connect(self._on_filter_changed)
+
+        self.btn_export = QPushButton("Export CSV")
         self.btn_export.setStyleSheet("""
             QPushButton {
-                background-color: #10B981; color: white; border-radius: 8px;
-                padding: 10px 20px; font-weight: bold; font-size: 13px;
+                background: #10B981; color: white; border-radius: 8px;
+                padding: 10px 22px; font-weight: 600;
             }
-            QPushButton:hover { background-color: #059669; }
+            QPushButton:hover { background: #059669; }
         """)
-        self.btn_export.clicked.connect(self.export_to_csv)
+        self.btn_export.clicked.connect(self._export_placeholder)
 
-        search_layout.addWidget(QLabel("Référence:"))
-        search_layout.addWidget(self.search_ref)
-        search_layout.addSpacing(20)
-        search_layout.addWidget(QLabel("Désignation:"))
-        search_layout.addWidget(self.search_name)
-        search_layout.addStretch()
-        search_layout.addWidget(self.btn_export)
-        self.layout.addWidget(search_container)
+        filter_bar.addWidget(QLabel("Code:"))
+        filter_bar.addWidget(self.filter_field_1)
+        filter_bar.addSpacing(16)
+        filter_bar.addWidget(QLabel("Name:"))
+        filter_bar.addWidget(self.filter_field_2)
+        filter_bar.addStretch()
+        filter_bar.addWidget(self.btn_export)
 
-        # Tableau (Ancien visuel rétabli)
-        self.table_container = QFrame()
-        self.table_container.setStyleSheet("background-color: white; border-radius: 12px; border: 1px solid #E5E7EB;")
-        table_layout = QVBoxLayout(self.table_container)
-        
-        self.stock_table = QTableWidget()
-        self.stock_table.verticalHeader().setVisible(False)
-        self.stock_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        self.stock_table.setStyleSheet("""
+        layout.addLayout(filter_bar)
+
+        # Table container
+        table_frame = QFrame()
+        table_frame.setStyleSheet("background: white; border-radius: 12px; border: 1px solid #E5E7EB;")
+        table_vbox = QVBoxLayout(table_frame)
+        table_vbox.setContentsMargins(0, 0, 0, 0)
+
+        self.table = QTableWidget()
+        self.table.verticalHeader().setVisible(False)
+        self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.table.setStyleSheet("""
             QTableWidget { border: none; gridline-color: #F3F4F6; }
-            QHeaderView::section { 
-                background-color: white; padding: 12px; border: none;
-                border-bottom: 2px solid #E5E7EB; font-weight: bold; color: #6B7280; font-size: 11px;
+            QHeaderView::section {
+                background: white; padding: 12px; border: none;
+                border-bottom: 2px solid #E5E7EB; font-weight: bold;
+                color: #6B7280; font-size: 11px;
             }
         """)
-        
-        table_layout.addWidget(self.stock_table)
-        self.layout.addWidget(self.table_container)
 
-    def on_input_changed(self):
-        self.search_timer.stop()
-        self.search_timer.start(400)
+        table_vbox.addWidget(self.table)
+        layout.addWidget(table_frame, stretch=1)
 
-    def load_initial_data(self):
-        self.show_placeholder_message("Saisissez une référence ou une désignation pour afficher les articles.")
+    def _on_filter_changed(self):
+        self.debounce_timer.stop()
+        self.debounce_timer.start(450)
 
-    def show_placeholder_message(self, message):
-        """Affiche un message stylisé qui occupe tout le tableau."""
-        self.stock_table.blockSignals(True)
-        self.stock_table.clearSpans()
-        
-        headers = ["RÉFÉRENCE", "DÉSIGNATION", "CATÉGORIE", "EMPLACEMENT", "PRIX VENTE", "STOCK"]
-        if self.role == "gerant": headers.append("PRIX ACHAT")
-        
-        self.stock_table.setColumnCount(len(headers))
-        self.stock_table.setHorizontalHeaderLabels(headers)
-        self.stock_table.setRowCount(1)
-        self.stock_table.setSpan(0, 0, 1, len(headers))
-        
+    def _show_initial_placeholder(self):
+        self._set_placeholder("Enter a code or name to view items.")
+
+    def _set_placeholder(self, message: str):
+        self.table.blockSignals(True)
+        self.table.clearSpans()
+
+        cols = ["CODE", "NAME", "GROUP", "LOCATION", "VALUE", "QUANTITY"]
+        if self.role == "manager":
+            cols.append("COST")
+
+        self.table.setColumnCount(len(cols))
+        self.table.setHorizontalHeaderLabels(cols)
+        self.table.setRowCount(1)
+        self.table.setSpan(0, 0, 1, len(cols))
+
         item = QTableWidgetItem(message)
         item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-        item.setForeground(self.grey_text)
+        item.setForeground(self.grey)
         item.setFont(self.italic_font)
         item.setFlags(Qt.ItemFlag.NoItemFlags)
-        self.stock_table.setItem(0, 0, item)
-        
-        self.apply_header_styles()
-        self.stock_table.blockSignals(False)
 
-    def apply_header_styles(self):
-        header = self.stock_table.horizontalHeader()
+        self.table.setItem(0, 0, item)
+        self._apply_table_styles()
+        self.table.blockSignals(False)
+
+    def _apply_table_styles(self):
+        header = self.table.horizontalHeader()
         header.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        if self.stock_table.columnCount() >= 6:
+        if self.table.columnCount() >= 5:
             header.setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)
-            self.stock_table.setColumnWidth(4, 100) # Prix Vente
+            self.table.setColumnWidth(4, 110)
             header.setSectionResizeMode(5, QHeaderView.ResizeMode.Fixed)
-            self.stock_table.setColumnWidth(5, 80)  # Stock
+            self.table.setColumnWidth(5, 90)
 
-    def perform_search(self):
-        name = self.search_name.text().strip()
-        ref = self.search_ref.text().strip()
-        
-        if not name and not ref:
-            self.load_initial_data()
+    def _execute_search(self):
+        val1 = self.filter_field_1.text().strip()
+        val2 = self.filter_field_2.text().strip()
+
+        if not val1 and not val2:
+            self._show_initial_placeholder()
             return
 
-        params = {'reference': ref, 'designation': name}
-        self.worker = ApiWorker(f"{self.api_url}/articles/search_v2", params, self.headers)
-        self.worker.finished.connect(self.handle_search_results)
-        self.worker.error.connect(lambda e: self.show_placeholder_message(f"Erreur: {e}"))
-        self.worker.start()
+        # In real version: self.worker = BackgroundApiWorker(...)
+        # Here we simulate
+        QMessageBox.information(self, "Demo", 
+                                "This would launch an async search.\n\n"
+                                "Real API call & results parsing hidden.")
 
-    def handle_search_results(self, articles):
-        if not articles:
-            self.show_placeholder_message("Aucun article ne correspond à votre recherche.")
-        else:
-            self.display_articles(articles)
+    def _export_placeholder(self):
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Export", f"Items_{datetime.now():%Y%m%d}.csv", "CSV (*.csv)"
+        )
+        if path:
+            QMessageBox.information(self, "Demo", 
+                                    "Export would be downloaded here.\n"
+                                    "Real file generation hidden.")
 
-    def display_articles(self, articles):
-        self.stock_table.blockSignals(True)
-        self.stock_table.clearSpans()
-        
-        is_gerant = (self.role == "gerant")
-        headers = ["RÉFÉRENCE", "DÉSIGNATION", "CATÉGORIE", "EMPLACEMENT", "PRIX VENTE", "STOCK"]
-        if is_gerant: headers.append("PRIX ACHAT")
-            
-        self.stock_table.setColumnCount(len(headers))
-        self.stock_table.setHorizontalHeaderLabels(headers)
-        self.stock_table.setRowCount(len(articles))
 
-        for row_idx, art in enumerate(articles):
-            ref_item = QTableWidgetItem(str(art.get('reference', '')))
-            ref_item.setData(Qt.ItemDataRole.UserRole, art.get('id_article'))
-            
-            qty = int(art.get('quantite_disponible', 0))
-            
-            row_items = [
-                ref_item,
-                QTableWidgetItem(str(art.get('nom_article', ''))),
-                QTableWidgetItem(str(art.get('categorie', '') or "N/A")),
-                QTableWidgetItem(str(art.get('emplacement', '') or "N/A")),
-                QTableWidgetItem(f"{float(art.get('prix_vente', 0)):.2f}"),
-                QTableWidgetItem(str(qty))
-            ]
-
-            if is_gerant:
-                pa = float(art.get('prix_achat', 0) if art.get('prix_achat') else 0)
-                pa_item = QTableWidgetItem(f"{pa:.2f}")
-                pa_item.setBackground(self.green_bg)
-                row_items.append(pa_item)
-
-            for col_idx, item in enumerate(row_items):
-                if col_idx == 5: item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-                if qty <= 0:
-                    item.setForeground(self.red_color)
-                    item.setFont(self.bold_font)
-                
-                # Droits d'édition
-                if is_gerant and col_idx == 6:
-                    item.setFlags(item.flags() | Qt.ItemFlag.ItemIsEditable)
-                    # On reconnecte le signal seulement quand on est en mode édition
-                    try: self.stock_table.itemChanged.disconnect()
-                    except: pass
-                    self.stock_table.itemChanged.connect(self.on_item_changed)
-                else:
-                    item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable | Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable)
-
-                self.stock_table.setItem(row_idx, col_idx, item)
-
-        self.apply_header_styles()
-        self.stock_table.blockSignals(False)
-
-    def on_item_changed(self, item):
-        # On ne réagit que si c'est la colonne du PRIX ACHAT (index 6)
-        if item.column() == 6:
-            row = item.row()
-            # Sécurité : vérifier que l'ID de l'article est présent
-            id_item = self.stock_table.item(row, 0)
-            if not id_item: return
-            
-            article_id = id_item.data(Qt.ItemDataRole.UserRole)
-            
-            try:
-                # 1. Nettoyage et validation du prix
-                raw_text = item.text().replace(',', '.').strip()
-                if not raw_text: return # Évite de traiter si la case est vidée par erreur
-                
-                new_val = float(raw_text)
-                
-                # 2. Sécurité : Empêcher les prix négatifs avant l'envoi
-                if new_val < 0:
-                    QMessageBox.warning(self, "Erreur", "Le prix d'achat ne peut pas être négatif.")
-                    self.perform_search() # On recharge pour annuler visuellement la saisie
-                    return
-
-                # 3. Appel API
-                res = requests.put(
-                    f"{self.api_url}/articles/{article_id}/prix_achat", 
-                    json={"prix_achat": new_val}, 
-                    headers=self.headers, 
-                    timeout=5
-                )
-
-                if res.status_code == 200:
-                    # IMPORTANT : Bloquer les signaux pendant qu'on change le visuel
-                    self.stock_table.blockSignals(True)
-                    item.setBackground(self.success_bg) # Confirmation visuelle (vert clair)
-                    item.setText(f"{new_val:.2f}")      # Formatage propre
-                    self.stock_table.blockSignals(False)
-                else:
-                    # Si le serveur refuse (ex: 404 ou 422)
-                    QMessageBox.warning(self, "Erreur Serveur", f"Impossible de mettre à jour : {res.text}")
-                    self.perform_search() # On remet la valeur d'origine
-
-            except ValueError:
-                # En cas de saisie de texte au lieu d'un nombre
-                QMessageBox.warning(self, "Format Invalide", "Veuillez saisir un nombre valide.")
-                self.perform_search() 
-            except Exception as e:
-                QMessageBox.critical(self, "Erreur", f"Problème de connexion : {str(e)}")
-                self.perform_search()
-
-    def export_to_csv(self):
-        file_path, _ = QFileDialog.getSaveFileName(self, "Export", f"Stock_{datetime.now().strftime('%Y%m%d')}.csv", "CSV (*.csv)")
-        if file_path:
-            try:
-                res = requests.get(f"{self.api_url}/articles/export/csv", headers=self.headers, timeout=10)
-                if res.status_code == 200:
-                    with open(file_path, 'wb') as f: f.write(res.content)
-                    QMessageBox.information(self, "Succès", "Exportation terminée.")
-            except: pass
+# ── Demo launcher ───────────────────────────────────────────────────────
+if __name__ == "__main__":
+    from PyQt6.QtWidgets import QApplication
+    import sys
+    app = QApplication(sys.argv)
+    w = GenericItemListView("fake-token", user_role="manager")
+    w.setWindowTitle("Item List – Showcase Only")
+    w.resize(1180, 740)
+    w.show()
+    sys.exit(app.exec())

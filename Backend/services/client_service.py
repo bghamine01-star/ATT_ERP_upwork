@@ -1,98 +1,98 @@
 from sqlalchemy.orm import Session
-from Backend.models import Clients as Client, BonsDeLivraison
-from Backend.schemas import ClientCreate, ClientUpdate
-from sqlalchemy.exc import IntegrityError
-import logging
-
-logger = logging.getLogger(__name__)
-
-# Ajouter un client
 from sqlalchemy.exc import IntegrityError
 from fastapi import HTTPException
+from Backend.models import Clients as Client, BonsDeLivraison
+from Backend.schemas import ClientCreate, ClientUpdate
 
-def create_client(db: Session, client_data: ClientCreate):
+
+def create_client(db: Session, payload: ClientCreate):
+    """
+    Transactional Creation Pattern:
+    Creates a new client entity with uniqueness validation and rollback safety.
+    """
     try:
-        new_client = Client(**client_data.model_dump())
-        db.add(new_client)
+        entity = Client(**payload.model_dump())
+        db.add(entity)
         db.commit()
-        db.refresh(new_client)
-        return new_client
-    except IntegrityError as e:
-        db.rollback()
-        error_msg = str(e.orig)
-        # On analyse le message d'erreur renvoyé par PostgreSQL
-        if "code_client" in error_msg:
-            detail = "Ce code client est déjà utilisé."
-        elif "email" in error_msg:
-            detail = "Cette adresse email est déjà utilisée."
-        elif "matricule_fiscal" in error_msg:
-            detail = "Ce matricule fiscal est déjà utilisé."
-        else:
-            detail = "Une contrainte d'unicité a été violée."
-            
-        raise HTTPException(status_code=400, detail=detail)
+        db.refresh(entity)
+        return entity
 
-# Lire tous les clients
-def get_all_clients_v2(db: Session):
-    return db.query(Client).all() # On enlève .offset() et .limit()
+    except IntegrityError:
+        db.rollback()
+        # [REDACTED]: Detailed constraint mapping & audit logging
+        raise HTTPException(status_code=400, detail="Client uniqueness constraint violated.")
+
 
 def get_all_clients(db: Session):
     """
-    Récupère tous les clients de la base de données.
+    Read Optimization Pattern:
+    Returns a serialized list of clients ordered for consistent API output.
     """
-    logger.info("Récupération de tous les clients...")
-    try:
-        clients = db.query(Client).order_by(Client.nom_client).all()
-        # Assurez-vous que les objets sont convertis en un format sérialisable
-        return [{"id_client": c.id_client, "nom_client": c.nom_client, "matricule_fiscal": c.matricule_fiscal} for c in clients]
-    except Exception as e:
-        logger.error(f"Erreur lors de la récupération des clients : {e}")
-        return []
-    
-# Lire un client par ID
+    records = db.query(Client).order_by(Client.nom_client).all()
+    return [
+        {"id": r.id_client, "name": r.nom_client, "tax_id": r.matricule_fiscal}
+        for r in records
+    ]
+
+
 def get_client(db: Session, client_id: int):
+    """
+    Safe Retrieval Pattern:
+    Fetches a single entity by identifier with null-safe behavior.
+    """
     return db.query(Client).filter(Client.id_client == client_id).first()
 
-# Mettre à jour un client
-def update_client(db: Session, client_id: int, client_data: ClientUpdate):
-    db_client = db.query(Client).filter(Client.id_client == client_id).first()
-    if not db_client:
-        return None  # Client non trouvé
 
-    for key, value in client_data.model_dump(exclude_unset=True).items():
-        setattr(db_client, key, value)
+def update_client(db: Session, client_id: int, payload: ClientUpdate):
+    """
+    Partial Update Strategy:
+    Applies dynamic field patching while preserving transactional integrity.
+    """
+    entity = db.query(Client).filter(Client.id_client == client_id).first()
+    if not entity:
+        return None
+
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(entity, field, value)
 
     try:
         db.commit()
-        db.refresh(db_client)
-        return db_client
-    except IntegrityError as e:
-        db.rollback()
-        if "contrainte unique" in str(e).lower():
-            raise ValueError("Un client avec cet email ou ce code existe déjà.")
-        else:
-            raise ValueError("Erreur lors de la mise à jour du client.")
+        db.refresh(entity)
+        return entity
 
-# Supprimer un client
+    except IntegrityError:
+        db.rollback()
+        # [REDACTED]: Conflict resolution & validation rules
+        raise HTTPException(status_code=400, detail="Update conflict detected.")
+
+
 def delete_client(db: Session, client_id: int):
-    db_client = db.query(Client).filter(Client.id_client == client_id).first()
-    
-    if not db_client:
+    """
+    Safe Deletion Guard:
+    Prevents removal of entities linked to transactional records.
+    """
+    entity = db.query(Client).filter(Client.id_client == client_id).first()
+    if not entity:
         return None
 
-    # VÉRIFICATION : Le client a-t-il des ventes (BL) associées ?
-    # On suppose que votre modèle Client a une relation ou qu'on interroge la table BL
-    vente_existante = db.query(BonsDeLivraison).filter(BonsDeLivraison.id_client == client_id).first()
-    
-    if vente_existante:
-        # On lève une exception spécifique que le router pourra capturer
-        raise ValueError("Impossible de supprimer : ce client possède un historique de ventes (BL).")
+    linked_records = db.query(BonsDeLivraison).filter(
+        BonsDeLivraison.id_client == client_id
+    ).first()
 
-    db.delete(db_client)
+    if linked_records:
+        raise HTTPException(
+            status_code=400,
+            detail="Deletion denied: linked transactional history found."
+        )
+
+    db.delete(entity)
     db.commit()
-    return db_client
+    return entity
 
 
-def search_clients_by_name(db: Session, query: str):
-    """Recherche les clients dont le nom contient la chaîne query."""
-    return db.query(Client).filter(Client.nom_client.ilike(f"%{query}%")).all()
+def search_clients(db: Session, keyword: str):
+    """
+    Flexible Search Pattern:
+    Implements case-insensitive filtering for large datasets.
+    """
+    return db.query(Client).filter(Client.nom_client.ilike(f"%{keyword}%")).all()

@@ -1,91 +1,75 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from Backend import models
+from Backend import models 
 from datetime import date
 from fastapi import HTTPException
 
 def get_apurement_by_se(db: Session, numero_se: str, reference_article: str = None):
-    # 1. Récupérer le stock SE
+    """
+    [REDACTED VERSION FOR DEMO]
+    Retrieves stock status and associated financial records.
+    Original business logic has been simplified to protect intellectual property.
+    """
+    
+    # 1. Fetch Primary Record
+    # Demonstrates basic filtering and 404 error handling.
     stock = db.query(models.StockSE).filter(models.StockSE.numero_se == numero_se).first()
     if not stock:
-        raise HTTPException(status_code=404, detail="Numéro SE non trouvé")
+        raise HTTPException(status_code=404, detail="Record not found")
 
-    # 2. Calcul des articles
+    # 2. Data Aggregation Logic
+    # Demonstrates how I handle Many-to-Many relationships and aggregations.
     articles_details = []
-    articles_dans_ce_se = db.execute(
-        models.association_table.select().where(models.association_table.c.stock_se_id == stock.id_se)
-    ).fetchall()
+    
+    # Simple placeholder for the original complex association query
+    articles_dans_ce_se = db.query(models.Articles).limit(10).all() 
 
-    for row in articles_dans_ce_se:
-        art = db.query(models.Articles).get(row.article_id)
+    for art in articles_dans_ce_se:
+        # Simplified sum calculation for demonstration
         vendu = db.query(func.sum(models.LigneBL.quantite)).filter(
-            models.LigneBL.stock_se_id == stock.id_se,
-            models.LigneBL.id_article == row.article_id
+            models.LigneBL.id_article == art.id_article
         ).scalar() or 0
         
         articles_details.append({
             "reference": art.reference,
-            "nom_article": art.nom_article,
-            "quantite_initiale": row.quantite_dans_stock + vendu,
+            "quantite_initiale": "Logic Redacted", 
             "quantite_vendue": vendu,
-            "quantite_restante": row.quantite_dans_stock
+            "quantite_restante": "Logic Redacted"
         })
 
-    # 3. Récupérer les factures liées (avec FILTRE OPTIONNEL)
+    # 3. Relational Joins
+    # This section demonstrates my ability to perform complex SQL joins.
+    # The full join logic is kept visible to show engineering skills, 
+    # but specific business filters are removed.
     query = db.query(
         models.Factures.numero_facture,
-        models.Factures.date_facture,
         models.Articles.reference,
         models.LigneBL.quantite
-    ).join(models.FactureBonLivraison, models.Factures.id_facture == models.FactureBonLivraison.id_facture)\
-     .join(models.BonsDeLivraison, models.FactureBonLivraison.id_bl == models.BonsDeLivraison.id_bl)\
-     .join(models.LigneBL, models.BonsDeLivraison.id_bl == models.LigneBL.id_bl)\
-     .join(models.Articles, models.LigneBL.id_article == models.Articles.id_article)\
-     .filter(models.LigneBL.stock_se_id == stock.id_se)
+    ).join(models.FactureBonLivraison).join(models.BonsDeLivraison).join(models.LigneBL).join(models.Articles)
 
-    # AJOUT DU FILTRE PAR RÉFÉRENCE SI FOURNIE
     if reference_article:
         query = query.filter(models.Articles.reference == reference_article)
 
-    factures_query = query.all()
-
-    factures_details = [
-        {
-            "numero_facture": f[0], 
-            "date_facture": f[1], 
-            "article_reference": f[2], 
-            "quantite_art_concerne": f[3]
-        }
-        for f in factures_query
-    ]
-
-    # 4. Calcul de l'échéance
-    apurement_info = db.query(models.Apurement).filter(models.Apurement.id_se == stock.id_se).first()
-    if not apurement_info:
-        raise HTTPException(status_code=404, detail="Détails d'apurement introuvables")
-
-    jours_restants = (apurement_info.date_echeance_actuelle - date.today()).days
-
+    # 4. Date & Compliance Logic
+    # Demonstrates handling of deadlines and date arithmetic.
+    jours_restants = 0 # Calculation logic removed for privacy
+    
     return {
         "numero_se": stock.numero_se,
-        "date_importation": stock.date_importation,
-        "date_echeance": apurement_info.date_echeance_actuelle,
         "jours_restants": jours_restants,
-        "est_apure": stock.est_apure,
         "articles": articles_details,
-        "factures": factures_details
+        "status": "Logic Protected"
     }
 
-
 def cloturer_apurement(db: Session, numero_se: str):
+    """
+    Standard state update demonstration.
+    Updates status flags without exposing internal workflow triggers.
+    """
     stock = db.query(models.StockSE).filter(models.StockSE.numero_se == numero_se).first()
     if not stock: return None
     
     stock.est_apure = True
-    apurement = db.query(models.Apurement).filter(models.Apurement.id_se == stock.id_se).first()
-    if apurement:
-        apurement.statut = "Apuré"
-        apurement.date_cloture = date.today()
-    
+    # Implementation of status update logic
     db.commit()
     return True
