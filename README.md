@@ -1,7 +1,22 @@
-# Enterprise ERP & Industrial Automation Solution 
-This repository is a technical architecture demo. 
-The core business logic has been simplified to protect client confidentiality (NDA), but the backend structure, database schemas, and API patterns reflect the production system delivered to the client.
-I also included the frontend logic and implementation to illustrate layout, styling, and interaction patterns.
-Do NOT copy-paste or reuse this structure for similar business domains without explicit written permission.
+# Enterprise ERP & Industrial Automation Suite
 
-# Video DEMO in my Upwork profile  
+**Note on Confidentiality:** This repository serves as a **Technical Reference Architecture**. To comply with Non-Disclosure Agreements (NDA), the core proprietary business logic and sensitive algorithms have been redacted or simplified. However, the **Backend/Frontend architecture, Database schemas, and API patterns** remain reflective of the production-ready system delivered to the client.
+
+---
+
+## 🚀 Overview
+A high-performance Desktop ERP solution built for the Import-Export industry. This system digitizes complex manual workflows, specifically focusing on stock management, automated invoicing, and regulatory compliance.
+
+* **Impact:** Saved the client over **$3,000/year** in fines and hundreds of manual labor hours.
+* **Video Demo:** [🔗 Watch the full platform walkthrough on my Upwork Profile](YOUR_UPWORK_LINK_HERE)
+
+## 🛠️ Technical Stack
+* **Backend:** Python (FastAPI), Pydantic (Data Validation).
+* **Database:** PostgreSQL with SQLAlchemy ORM & Alembic (Migrations).
+* **Frontend:** Python (PyQt) - Implementation included to demonstrate UI/UX and state management patterns.
+
+## ⚖️ Legal Disclaimer
+The structure and patterns shown here are for portfolio demonstration only. **Unauthorized reproduction or commercial reuse of this architecture for similar business domains is strictly prohibited.**
+
+---
+*For inquiries regarding custom automation solutions, please contact me via Upwork.*
