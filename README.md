@@ -8,7 +8,7 @@
 A high-performance Desktop ERP solution built for the Import-Export industry. This system digitizes complex manual workflows, specifically focusing on stock management, automated invoicing, and regulatory compliance.
 
 * **Impact:** Saved the client over **$3,000/year** in fines and **100's** of manual labor hours.
-* **Video Demo:** [🔗 Watch the full platform walkthrough on my Upwork Profile](YOUR_UPWORK_LINK_HERE)
+* **Video Demo:** [🔗 Watch the full platform walkthrough on my Upwork Profile (Including Video)](https://www.upwork.com/freelancers/~01dbcca201255fd36a?p=2025704186703740928)
 
 ## 🛠️ Technical Stack
 * **Backend:** Python (FastAPI), Pydantic (Data Validation).
